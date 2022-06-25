@@ -11,7 +11,22 @@ using RandomizerMod;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using Object = UnityEngine.Object;
-using GiveAction = RandomizerMod.GiveItemActions.GiveAction;
+
+
+//namespace Modding.Patches
+//{
+//	class patch_GameManager : global::GameManager
+//	{
+//		public extern void orig_BeginSceneTransition(GameManager.SceneLoadInfo info);
+
+//		public void BeginSceneTransition(GameManager.SceneLoadInfo info)
+//		{
+//			TangledMapView.TangledMapViewMod.Instance.OnBeginSceneTransition(info);
+
+//			orig_BeginSceneTransition(info);
+//		}
+//	}
+//}
 
 namespace TangledMapView {
 
@@ -20,12 +35,15 @@ public class TangledMapViewMod : Mod {
 
 	internal MapServer server;
 
-	private delegate void GiveItem_Fn(GiveAction action, string item, string location, int geo = 0);
+	//private delegate void GiveItem_Fn(GiveAction action, string item, string location, int geo = 0);
+	//private delegate void BeginSceneTransition_Fn(GameManager self, GameManager.SceneLoadInfo info);
 
 	// public SaveGameData activeSaveData;
 	private bool saveLoaded, startingSave;
-	private RandomizerMod.RandomizerMod rndMod;
-	private Hook itemHook;
+	//private RandomizerMod.RandomizerMod rndMod;
+	//private Hook itemHook;
+	//private Hook startNewGameHook;
+	private Hook transitionHook;
 	public string CurrentRoom { get; private set; }
 
 	public TangledMapViewMod() : base("TangledMapView") { }
@@ -45,34 +63,42 @@ public class TangledMapViewMod : Mod {
 		tmm.mod = this;
 		Object.DontDestroyOnLoad(go);
 
-		rndMod = RandomizerMod.RandomizerMod.Instance;
+		//rndMod = RandomizerMod.RandomizerMod.Instance;
 
+		RandomizerMod.IC.TrackerUpdate.OnItemObtained += OnGiveItem;
 		//add hook to watch when the randomizer gives the player an item
-		itemHook = new Hook(//(GiveItemActions is a static class, so we pass a generic "object" for "this"
-			typeof(GiveItemActions).GetMethod(nameof(GiveItemActions.GiveItem), BindingFlags.Static | BindingFlags.Public),
-			typeof(TangledMapViewMod).GetMethod(nameof(OnGiveItem), BindingFlags.Static | BindingFlags.NonPublic)
-		);
+		//	itemHook = new Hook(//(GiveItemActions is a static class, so we pass a generic "object" for "this"
+		//	typeof(GiveItemActions).GetMethod(nameof(GiveItemActions.GiveItem), BindingFlags.Static | BindingFlags.Public),
+		//	typeof(TangledMapViewMod).GetMethod(nameof(OnGiveItem), BindingFlags.Static | BindingFlags.NonPublic)
+		//);
 
+		//	GameManager.Beg
+		//ModHooks.BeforeSceneLoadHook += OnBeginSceneTransition;
 		On.GameManager.BeginSceneTransition += OnBeginSceneTransition;
+
 		UnityEngine.SceneManagement.SceneManager.sceneLoaded += OnSceneLoaded;
-		ModHooks.Instance.AfterSavegameLoadHook += data => {
-			// Log("get load");
+
+		ModHooks.AfterSavegameLoadHook += data => {
+			Log("get load");
 			saveLoaded = true;
-			server.Send(PrepareSaveDataMessage());
+			string saveData = PrepareSaveDataMessage();
+			Instance.Log($"saveData= {saveData}");
+			server.Send(saveData);
 		};
 
-
 		On.UIManager.StartNewGame += (orig, self, death, rush) => {
-			// Log("got StartNewGame");
+			Log("got StartNewGame");
 			startingSave = true;//we will actually push data once a scene loads
 			orig(self, death, rush);
 		};
+
+		Log("done init");
 		//note: ModHooks.Instance.NewGameHook not called, likely because the randomizer mod overrides how a game is started
 	}
 
-	private static void OnGiveItem(GiveItem_Fn orig, GiveAction action, string item, string location, int geo) {
-		orig(action, item, location, geo);
-		Instance.Log($"GiveItem hook: {action}, {item}, {location}, {geo}");
+	private static void OnGiveItem(int id, string item, string location) {
+		//orig(action, item, location, geo);
+		Instance.Log($"GiveItem hook: {id}, {item}, {location}");
 
 		Instance.server.Send(JToken.FromObject(new {
 			type = "getItem",
@@ -80,9 +106,11 @@ public class TangledMapViewMod : Mod {
 		}).ToString());
 	}
 
-	private void OnBeginSceneTransition(On.GameManager.orig_BeginSceneTransition orig, GameManager self, GameManager.SceneLoadInfo info) {
-		// Log($"OnBeginSceneTransition: to {info.SceneName}[{info.EntryGateName}]");
-		if (!string.IsNullOrEmpty(info.SceneName) && !string.IsNullOrEmpty(info.EntryGateName)) {
+	private void OnBeginSceneTransition(On.GameManager.orig_BeginSceneTransition orig, GameManager self, GameManager.SceneLoadInfo info)
+	{
+		Log($"OnBeginSceneTransition: to {info.SceneName}[{info.EntryGateName}]");
+		if (!string.IsNullOrEmpty(info.SceneName) && !string.IsNullOrEmpty(info.EntryGateName))
+		{
 			server.Send("revealTransition", "to", $"{info.SceneName}[{info.EntryGateName}]");
 		}
 
@@ -130,7 +158,10 @@ public class TangledMapViewMod : Mod {
 				data = new {
 					//this is more-or-less the normal save file data, but not everything
 					playerData = GameManager.instance.playerData,
-					PolymorphicModData = new {RandomizerMod = JsonConvert.SerializeObject(rndMod.Settings)},
+					PolymorphicModData = new {
+						RandomizerMod = JsonConvert.SerializeObject(RandomizerMod.RandomizerMod.RS),
+						context = JsonConvert.SerializeObject(RandomizerMod.RandomizerMod.RS.Context)
+					},
 				},
 			},
 			Formatting.None, new JsonSerializerSettings {

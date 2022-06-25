@@ -198,6 +198,7 @@ class DataRender {
 					let realItemId = this.data.getItemAt(item.id)
 					let realItem = this.data.getNormalItemInfo(realItemId)
 					currentDesc = DataRender.getItemDescription(realItem)
+					if (currentDesc == "Nothing") currentDesc = realItemId.replaceAll("_", " ");
 				}
 
 				mkEl("currentItem", currentDesc)
