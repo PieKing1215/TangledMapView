@@ -445,13 +445,15 @@ class App {
 	wsConnect() {
 		if (this.ws || location.protocol === "file:") return
 
-		this.ws = new WebSocket("ws://" + location.host + "/ws")
+		let host = (new URLSearchParams(location.search)).get("host") || location.host;
+		this.ws = new WebSocket("ws://" + host + "/ws")
 		this.ws.addEventListener("open", ev => {
 			console.log("Connected to server")
 			this._render()
 		})
 		this.ws.addEventListener("message", ev => {
-			//console.log("Msg", ev.data)
+			console.log("Msg", ev.data)
+			console.log(ev);
 			this.handleMessage(JSON.parse(ev.data))
 		})
 		this.ws.addEventListener("close", ev => {

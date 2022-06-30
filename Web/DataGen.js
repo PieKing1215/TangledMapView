@@ -200,7 +200,7 @@ class DataGen {
 			tPlacements[srcDoorId] = randomizedPlacements[srcDoorId]
 		}
 
-		// console.log("tPlacements", tPlacements)
+		console.log("tPlacements", tPlacements)
 
 
 		// Build doors, transitions, and such
